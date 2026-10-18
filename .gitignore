@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.py[cod]
+document_verification.db
+uploads/
+.vscode/
