@@ -2,4 +2,4 @@ Flask
 web3
 python-dotenv
 google-genai
-sqlite3
+gunicorn
