@@ -3,94 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="{{ url_for('static', filename='favicon.jpg') }}" type="image/x-icon">
-    <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.min.css') }}">
-    <title>Verify</title>
+    <title>Verify Certificate | Blockchain-Based Certificate Verification</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.jpg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='certificate.css') }}">
 </head>
 <body>
-    <div class="h-screen font-sans text-gray-900 bg-gray-300 border-box">
-        <div class="flex justify-center w-full mx-auto sm:max-w-lg">
-            <div class="flex flex-col items-center justify-center w-full h-auto my-20 bg-white sm:w-3/4 sm:rounded-lg sm:shadow-xl">
-                <div class="mt-10 mb-10 text-center">
-                    <h2 class="text-2xl font-semibold mb-2">Verify your files</h2>
-                    <p class="text-xs text-gray-500">File should be of format .png, .jpg, .jpeg</p>
-                </div>
-                <form id="file-upload-form" action="/upload" method="POST" enctype="multipart/form-data" class="relative w-4/5 h-32 max-w-xs mb-10 bg-white bg-gray-100 rounded-lg shadow-inner">
-                    <input type="file" id="file-upload" name="image" class="hidden" accept=".jpg, .jpeg, .png">
-                    <label for="file-upload" class="z-20 flex flex-col-reverse items-center justify-center w-full h-full cursor-pointer">
-                        <p class="z-10 text-xs font-light text-center text-gray-500">Drag & Drop your files here</p>
-                        <svg class="z-10 w-8 h-8 text-indigo-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path>
-                        </svg>
-                    </label>
-                </form>
-                <p id="selected-file" class="mb-2 text-sm text-gray-600">No file selected</p>
-                <button type="submit" form="file-upload-form" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full mt-4">
-                    Verify
-                </button>
-
-                <div id="progress-container" class="w-3/4 h-4 bg-gray-200 rounded-full mt-4 hidden">
-                    <div id="progress-bar" class="bg-blue-600 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full" style="width: 0%;">0%</div>
-                </div>
-
-                <div id="response" class="mt-4 text-center text-gray-700"></div>
-            </div>
-        </div>
-    </div>
-
+    <header class="nav-shell">
+        <a class="brand" href="/"><span class="brand-mark">BC</span> Blockchain-Based Certificate Verification</a>
+        <nav class="nav-links"><a href="/upload_details">Register certificate</a></nav>
+    </header>
+    <main class="page-shell">
+        <section class="page-intro">
+            <span class="eyebrow">Authenticity check</span>
+            <h2>Verify a certificate</h2>
+            <p>Compare the certificate details with its blockchain-backed fingerprint and confirm whether it is authentic.</p>
+        </section>
+        <section class="workspace-card">
+            <form id="file-upload-form" action="/upload" method="POST" enctype="multipart/form-data">
+                <input type="file" id="file-upload" name="image" hidden accept=".jpg,.jpeg,.png">
+                <label for="file-upload" class="drop-zone">
+                    <span class="drop-icon">✓</span>
+                    <strong>Choose certificate to verify</strong>
+                    <span>PNG, JPG or JPEG · Click to browse</span>
+                </label>
+                <p id="selected-file" class="selected-file">No file selected</p>
+                <div class="form-actions"><button id="submit-button" class="btn btn-primary" type="submit">Verify certificate</button></div>
+            </form>
+            <div id="progress-container" class="progress-wrap" hidden><div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div></div>
+            <div id="response" class="response"></div>
+        </section>
+    </main>
     <script>
-        // Handle file upload and progress
         const form = document.getElementById('file-upload-form');
-        const progressContainer = document.getElementById('progress-container');
-        const progressBar = document.getElementById('progress-bar');
-        const responseDiv = document.getElementById('response');
         const fileInput = document.getElementById('file-upload');
         const selectedFile = document.getElementById('selected-file');
-
-        fileInput.addEventListener('change', function() {
-            selectedFile.textContent = fileInput.files.length
-                ? fileInput.files[0].name
-                : 'No file selected';
-            responseDiv.textContent = '';
+        const response = document.getElementById('response');
+        const button = document.getElementById('submit-button');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        fileInput.addEventListener('change', () => {
+            selectedFile.textContent = fileInput.files.length ? fileInput.files[0].name : 'No file selected';
+            response.textContent = '';
         });
-
-        form.addEventListener('submit', function(event) {
+        form.addEventListener('submit', (event) => {
             event.preventDefault();
-            if (!fileInput.files.length) {
-                responseDiv.innerText = 'Please select a PNG or JPG image first.';
-                return;
-            }
-            button = event.submitter;
+            if (!fileInput.files.length) { response.textContent = 'Please select a certificate image first.'; return; }
             button.disabled = true;
-            const formData = new FormData(form);
-
+            response.textContent = 'Checking certificate authenticity...';
+            progressContainer.hidden = false;
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-
-            xhr.upload.onprogress = function(e) {
-                if (e.lengthComputable) {
-                    const percentComplete = (e.loaded / e.total) * 100;
-                    progressContainer.classList.remove('hidden');
-                    progressBar.style.width = percentComplete + '%';
-                    progressBar.innerText = Math.round(percentComplete) + '%';
-                }
+            xhr.open('POST', '/upload');
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) progressBar.style.width = `${(event.loaded / event.total) * 100}%`;
             };
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    window.location.href = '/result';
-                } else {
-                    responseDiv.innerText = xhr.responseText || 'Verification failed. Please try again.';
-                    button.disabled = false;
-                }
+            xhr.onload = () => {
+                if (xhr.status === 200) window.location.href = '/result';
+                else { response.textContent = xhr.responseText || 'Verification failed. Please try again.'; button.disabled = false; }
             };
-
-            xhr.onerror = function() {
-                responseDiv.innerText = 'Verification failed. Please try again.';
-                button.disabled = false;
-            };
-
-            xhr.send(formData);
+            xhr.onerror = () => { response.textContent = 'The verification request failed. Please try again.'; button.disabled = false; };
+            xhr.send(new FormData(form));
         });
     </script>
 </body>

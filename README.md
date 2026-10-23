@@ -1,7 +1,7 @@
-# **AI-Powered Blockchain-Based Document Verification System**
+# **Blockchain-Based Certificate Verification**
 
 ## **Vision**
-This project aims to revolutionize document verification by leveraging AI for text extraction and blockchain for secure, tamper-proof data storage. The system automates the identity verification process, improving efficiency, security, and scalability for entry and exit management systems.
+This project provides secure certificate registration and verification by combining AI-powered extraction with blockchain-backed, tamper-evident records.
 
 ## **Features**
 - **AI-powered OCR**: Uses the Gemini API for Optical Character Recognition (OCR) to extract text from document images.
@@ -69,6 +69,11 @@ To deploy the application locally:
    python app.py
    ```
 3. Open `http://127.0.0.1:5000` after running `app.py`
+
+### Upload Troubleshooting
+- Ensure `.env` contains valid `GOOGLE_API_KEY`, `PRIVATE_KEY`, and `WEB3_PROVIDER`.
+- If upload fails with Gemini `503 UNAVAILABLE` or `429`, the app tries `gemini-3.5-flash-lite` and `gemini-3.8-flash` with bounded retries. You can override this order with `GEMINI_MODELS` in `.env`.
+- Blockchain write failures are returned explicitly in the upload response so you can fix wallet/network configuration.
 
 ---
 

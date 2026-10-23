@@ -3,15 +3,32 @@ import time
 import json
 import hashlib
 import sqlite3
+import threading
+from queue import Queue
+from http import HTTPStatus
 from web3 import Web3
 from dotenv import load_dotenv
 from google import genai
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, render_template
 from werkzeug.utils import secure_filename
 
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
+GEMINI_MODELS = [
+    model.strip()
+    for model in os.getenv(
+        "GEMINI_MODELS",
+        "gemini-3.5-flash-lite,gemini-3.8-flash",
+    ).split(",")
+    if model.strip()
+]
+gemini_client = genai.Client(
+    api_key=GOOGLE_API_KEY,
+    http_options={
+        "timeout": 20000,
+        "retry_options": {"attempts": 1},
+    },
+)
 
 
 neoxt_url = os.getenv("WEB3_PROVIDER", "https://neoxt4seed1.ngd.network")
@@ -67,39 +84,97 @@ def home():
     return render_template('index.html')
 
 def verify_data(participant_name, json_data):
-    # Calculate the hash of the provided JSON data
     json_string = json.dumps(json_data, sort_keys=True)
     calculated_hash = hashlib.sha256(json_string.encode()).hexdigest()
     conn = sqlite3.connect('document_verification.db')
     c = conn.cursor()
-    # Retrieve the stored hash from the database
-    c.execute('SELECT document_hash FROM documents WHERE participant_name = ?', (participant_name,))
+    c.execute(
+        'SELECT 1 FROM documents WHERE participant_name = ? AND document_hash = ? LIMIT 1',
+        (participant_name, calculated_hash),
+    )
     result = c.fetchone()
     conn.close()
 
     if result:
-        stored_hash = result[0]
-        if calculated_hash == stored_hash:
-            return " ✅ Verification successful! Data is authentic."
-        else:
-            return " ❌ Verification failed! Data has been altered."
+        return " ✅ Verification successful! Data is authentic."
     else:
-        return " ❌ Verification failed! Doesn't Exist."
+        return " ❌ Verification failed! Certificate is not registered or has been altered."
 
-def extract_document_data(image_path):
+PROMPT = (
+    "Extract the text content from this image. Organise the text into paragraph "
+    "format, and extract the name and hackathon name. Respond with JSON containing "
+    "text, hackathon_name and name."
+)
+
+def _is_transient_gemini_error(error):
+    status_code = getattr(error, "status_code", None)
+    if status_code == HTTPStatus.SERVICE_UNAVAILABLE:
+        return True
+    error_text = str(error).upper()
+    return "503" in error_text or "UNAVAILABLE" in error_text
+
+def _format_gemini_error(error):
+    error_text = str(error)
+    if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+        return (
+            "Gemini daily quota is exhausted for this API project. "
+            "Wait for the quota reset or replace GOOGLE_API_KEY in .env with "
+            "a key from a project with available Gemini quota."
+        )
+    return f"Gemini processing failed: {error}"
+
+def _extract_document_data_once(image_path):
     uploaded_file = gemini_client.files.upload(file=image_path)
-    result = gemini_client.models.generate_content(
-        model="gemini-flash-latest",
-        contents=[uploaded_file, "Extract the text content from this image. Organise the text into paragraph format, and extract the name and hackathon name. Respond with JSON containing text, hackathon_name and name."],
-    )
-    response_text = result.text.strip()
-    if response_text.startswith("```"):
-        response_text = response_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    result_data = json.loads(response_text)
-    return {
-        "hackathon_name": result_data.get("hackathon_name", "Hackathon name not found"),
-        "name": result_data.get("name", "Name not found"),
-    }
+    last_error = None
+    for model in GEMINI_MODELS:
+        try:
+            result = gemini_client.models.generate_content(
+                model=model,
+                contents=[uploaded_file, PROMPT],
+            )
+            response_text = result.text.strip()
+            if response_text.startswith("```"):
+                response_text = response_text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            result_data = json.loads(response_text)
+            return {
+                "hackathon_name": result_data.get("hackathon_name", "Hackathon name not found"),
+                "name": result_data.get("name", "Name not found"),
+            }
+        except Exception as error:
+            last_error = error
+            if not _is_transient_gemini_error(error):
+                raise
+    raise RuntimeError(f"All configured Gemini models failed: {last_error}")
+
+def extract_document_data(image_path, max_attempts=2):
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        result_queue = Queue(maxsize=1)
+
+        def run_extraction():
+            try:
+                result_queue.put((True, _extract_document_data_once(image_path)))
+            except Exception as error:
+                result_queue.put((False, error))
+
+        worker = threading.Thread(target=run_extraction, daemon=True)
+        worker.start()
+        worker.join(timeout=20)
+        if worker.is_alive():
+            last_error = RuntimeError("Gemini request timed out after 20 seconds")
+            break
+
+        succeeded, result = result_queue.get()
+        if succeeded:
+            return result
+        try:
+            raise result
+        except Exception as error:
+            last_error = error
+        if not _is_transient_gemini_error(last_error) or attempt == max_attempts:
+            break
+        time.sleep(2 * attempt)
+    raise RuntimeError(_format_gemini_error(last_error))
 
 @app.route('/verify')
 def verify():
@@ -124,7 +199,7 @@ def upload():
     try:
         dictionary = extract_document_data(save)
     except Exception as error:
-        return f"Gemini processing failed: {error}", 502
+        return str(error), 503
     return render_template('result.html', dictionary=dictionary, verify_result=verify_data( dictionary["name"], dictionary))
 
 @app.route('/upload_data', methods=['POST'])
@@ -140,7 +215,7 @@ def upload_data():
     try:
         data = extract_document_data(save)
     except Exception as error:
-        return f"Gemini processing failed: {error}", 502
+        return str(error), 503
     # Convert JSON to string and then create a hash (SHA-256)
     data_string = json.dumps(data, sort_keys=True)
     data_hash = hashlib.sha256(data_string.encode()).hexdigest()
@@ -158,7 +233,7 @@ def upload_data():
     else:
         length = 0
     
-    to_address = "0x00000000000000000000000000000000000000" + str(length)
+    to_address = "0x0000000000000000000000000000000000000000"
     
     transaction = {
         'to': to_address,  # Use a smart contract address if interacting with one
@@ -170,8 +245,11 @@ def upload_data():
         'data': web3.to_bytes(hexstr=data_hash)
     }
     # Sign and send the transaction
-    signed_txn = web3.eth.account.sign_transaction(transaction, private_key)
-    txn_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    try:
+        signed_txn = web3.eth.account.sign_transaction(transaction, private_key)
+        txn_hash = web3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    except Exception as error:
+        return f"Blockchain transaction failed: {error}", 502
 
     # Store the document hash and transaction hash in the database
     store_in_db(data["name"], data_hash, web3.to_hex(txn_hash))
@@ -183,4 +261,4 @@ def result():
     return render_template('result.html', dictionary=dictionary, verify_result=verify_data( dictionary["name"], dictionary))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)

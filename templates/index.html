@@ -3,36 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-Powered Blockchain-Based Document Verification System</title>
-    <!-- favicon -->
+    <title>Blockchain-Based Certificate Verification</title>
     <link rel="icon" href="{{ url_for('static', filename='favicon.jpg') }}" type="image/x-icon">
-    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='certificate.css') }}">
   </head>
-  <body data-aos-easing="ease" data-aos-duration="1000" data-aos-delay="0">
-    <div class="loader-wraper" style="display: none;">
-      <div class="lds-roller"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
-    </div>
-
-    <section class="home py-5 d-flex align-items-center" id="header">
-      <div class="container text text-light py-5 aos-init aos-animate" data-aos="fade-right">
-        <h1 class="headline text">
-          Automate <span class="text-info">verification</span>  <br>
-          within your Organization
-        </h1>
-        <p class="para  py-3">
-          The NeoXChain platform is a top-tier Document Verification solution <br>
-          designed to improve the efficiency and security of your operations.
-        </p>
-
-        <div class="my-3">
-          <a class="btn bg-danger text-white" href="/upload_details">Upload Details</a>
-          <a class="btn bg-danger text-white" href="/verify">Go Verify</a>
+  <body>
+    <header class="nav-shell">
+      <a class="brand" href="/"><span class="brand-mark">BC</span> Blockchain-Based Certificate Verification</a>
+      <nav class="nav-links"><a href="/upload_details">Register certificate</a><a href="/verify">Verify certificate</a></nav>
+    </header>
+    <main class="hero">
+      <section class="hero-copy">
+        <span class="eyebrow">Trust, verified on-chain</span>
+        <h1>Certificates you can <span style="color: var(--blue)">trust.</span></h1>
+        <p>Register and verify certificates in seconds. Our secure workflow combines AI extraction with blockchain-backed records to help prevent tampering.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/upload_details">Register a certificate</a>
+          <a class="btn btn-secondary" href="/verify">Verify a certificate</a>
         </div>
-      </div>
-      <!-- end of container -->
-    </section>
-    <!-- end of home -->
-
-    </body>
+      </section>
+      <aside class="hero-card">
+        <div class="certificate-preview">
+          <div class="certificate-icon">▣</div>
+          <h3>Digital certificate vault</h3>
+          <p>Upload a certificate image, extract its identity details, and anchor its unique fingerprint to the blockchain.</p>
+        </div>
+        <div class="trust-row"><div class="trust-item">AI extraction</div><div class="trust-item">SHA-256 hash</div><div class="trust-item">On-chain proof</div></div>
+      </aside>
+    </main>
+  </body>
 </html>
